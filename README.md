@@ -1,1 +1,1 @@
-# Alzheimers_datasets Cellular Deconvolution Differential Gene Expression Analysis
+#Cellular deconvolution algorithms applied to Alzheimer's datasets (ROSMAP and MSBB) to compare differentially expressed gene signatures between bulk RNA-Seq and single-nucleus RNA-Seq (snRNA-Seq) data.
