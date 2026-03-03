@@ -1,1 +1,2 @@
-#Cellular deconvolution algorithms (CIBERSORT and Dtangle) applied to Alzheimer's datasets (ROSMAP and MSBB) to compare differentially expressed gene signatures between bulk RNA-Seq and single-nucleus RNA-Seq (snRNA-Seq) data.
+Characterizing the impact of cellular deconvolution on downstream analyses of RNA-seq data 
+
