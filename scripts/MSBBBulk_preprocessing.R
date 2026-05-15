@@ -4,13 +4,12 @@ library(dplyr)
 msbb_filtered1cpm <- read.table("MSBB_Filtered_counts_(greater_than_1cpm).tsv",row.names = 1, header = TRUE)
 msbb_rnaseq_metadata <- read.csv("MSBB_assay_rnaSeq_metadata.csv")
 msbb_biospecimen <- read.csv("MSBB_biospecimen_metadata.csv")
-individual_metadata <- read.csv("MSBB_individual_metadata.csv")
+individual_metadata <- read.csv("MSBB_individual_metadata_v10.csv")
 
 #protein coding genes list
 protein_coding = read.csv("protein_coding_ensemble_hgnclist.csv")
 
-
-#get metadata for a given tissue
+#changing for different combination of cerad scores 
 get_metadata <- function(tissue_name) {
   msbb_biospecimen %>%
     filter(assay == "rnaSeq", tissue == tissue_name) %>%
@@ -18,9 +17,19 @@ get_metadata <- function(tissue_name) {
     filter(exclude == FALSE, RIN >= 5.0) %>%
     select(where(~ !all(is.na(.) | . == ""))) %>%
     inner_join(individual_metadata, by = "individualID") %>%
+    mutate(CERAD_label = case_when(
+      CERAD == 1 ~ "None",
+      CERAD == 2 ~ "DefiniteAD",
+      CERAD == 3 ~ "ProbableAD",
+      CERAD == 4 ~ "PossibleAD")) %>%
     mutate(
-      pathology = case_when(Braak >= 3 & CERAD < 3 ~ "AD", TRUE ~ "NoAD"),
-      ageDeath = ifelse(ageDeath == "90+", "90", ageDeath)
+      pathology = case_when(
+        Braak >= 4 & CERAD_label %in% c("DefiniteAD","ProbableAD") ~ "AD",
+        Braak <=3 & CERAD_label %in% c("None", "PossibleAD") ~ "CTL",
+        TRUE ~ NA_character_
+      ),
+      ageDeath = ifelse(ageDeath == "90+", "90", ageDeath),
+      ageDeath = as.numeric(ageDeath)
     )
 }
 
@@ -34,7 +43,6 @@ get_unique_samples <- function(metadata_df) {
     as.data.frame()
 }
 
-
 #Get bulkcounts and metadata and save files
 bulkcounts_metadata <- function(tissue_name) {
   metadata_filtered <- get_metadata(tissue_name)
@@ -45,24 +53,6 @@ bulkcounts_metadata <- function(tissue_name) {
     filter(specimenID %in% colnames(msbb_filtered1cpm))
   bulk_counts <- msbb_filtered1cpm[, metadata_unique$specimenID]  
   bulk_counts <- bulk_counts[rownames(bulk_counts) %in% protein_coding$target_id, ]
-  
-  row_sums <- rowSums(bulk_counts[, 1:(ncol(bulk_counts))])
-  
-  #Keep only the gene row with max row sum per HGNC_symbol
-  bulk_counts$rowsums <- row_sums
-  bulk_counts <- as.data.frame(bulk_counts) %>%
-    rownames_to_column(var = "target_id") %>%
-    inner_join(protein_coding, by = "target_id")
-  
-  bulk_counts <- bulk_counts %>%
-    group_by(HGNC_symbol) %>%
-    filter(rowsums == max(rowsums)) %>%
-    slice(1) %>%
-    ungroup() %>%
-    select(-rowsums)%>%
-    column_to_rownames(var="target_id")%>%
-    select(-HGNC_symbol)
-  
   
   tissue_tag <- gsub(" ", "_", tolower(tissue_name))
   write.table(bulk_counts,file = paste0("bulkcounts_", tissue_tag, ".csv"),
@@ -90,7 +80,7 @@ bulk_merged <- cbind(bulk_PFC, bulk_FP)
 meta_merged <- bind_rows(meta_PFC, meta_FP)
 
 write.csv(bulk_merged, "bulkcounts_PFC_FP.csv", quote = FALSE)
-write.csv(meta_merged, "metadata_PFC_FP.csv", row.names = FALSE)
+write.csv(meta_merged, "metadata_PFC_FP_strict.csv", row.names = FALSE)
 
 
 
@@ -106,20 +96,18 @@ merged_metadata = Reduce(function(x, y) inner_join(x, y, by = "individualID"), m
 #Select specific columns from merged_metadata
 metadata_common = merged_metadata %>%
   select(individualID,matches("^specimenID"),
-    RIN.x,sequencingBatch.x,sequencingBatch.x.x,
-    sequencingBatch.y,sequencingBatch.y.y,
-    pmi.x,libraryPrep.x,
+    RIN.x,sequencingBatch.x,pmi.x,libraryPrep.x,
     sex.x,race.x,ageDeath.x,Braak.x,CERAD.x,pathology.x,rRNA.rate.x,ethnicity.x)
 colnames(metadata_common) = c('individualID','specimenID.IFG','specimenID.PHG','specimenID.FP','specimenID.STG',
-                                "RIN","sequencingBatch.IFG","sequencingBatch.FP","sequencingBatch.PHG","sequencingBatch.STG","pmi","libraryPrep","sex","race","ageDeath",
+                                "RIN","sequencingBatch","pmi","libraryPrep","sex","race","ageDeath",
                                 "Braak","CERAD","pathology","rRNA.rate","ethnicity")
 write.csv(metadata_common, "metadata_common_individuals.csv", row.names = FALSE)
 
 specimen_ids_list = list(
-  PFC_FP = metadata_common$specimenID.FP,
-  parahippocampal_gyrus = metadata_common$specimenID.PHG,
-  inferior_frontal_gyrus = metadata_common$specimenID.IFG,
-  superior_temporal_gyrus = metadata_common$specimenID.STG
+  PFC_FP_fil = metadata_common$specimenID.FP,
+  parahippocampal_gyrus_fil = metadata_common$specimenID.PHG,
+  inferior_frontal_gyrus_fil = metadata_common$specimenID.IFG,
+  superior_temporal_gyrus_fil = metadata_common$specimenID.STG
 )
 
 #read the 4 region bulkcounts file

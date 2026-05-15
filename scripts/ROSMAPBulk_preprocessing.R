@@ -28,21 +28,30 @@ indiv_info <- specimen_ids %>%
 
 #Classify as AD or NoAD
 indiv_pathology <- indiv_info %>%
+  mutate(CERAD_label = case_when(
+    ceradsc == 4 ~ "None",
+    ceradsc == 1 ~ "DefiniteAD",
+    ceradsc == 2 ~ "ProbableAD",
+    ceradsc == 3 ~ "PossibleAD",
+    TRUE ~ NA_character_
+  )) %>% 
   mutate(pathology = case_when(
-      braaksc >= 3 & ceradsc < 3 & cogdx >= 4 & dcfdx_lv >= 4 ~ "AD",
-      TRUE ~ "NoAD"),
-    age_death = ifelse(age_death == "90+", "90", age_death))
+    braaksc >= 4 & CERAD_label %in% c("DefiniteAD","ProbableAD") ~ "AD",
+    braaksc <=3 & CERAD_label %in% c("None", "PossibleAD") ~ "CTL",
+    TRUE ~ NA_character_),
+    age_death = ifelse(age_death == "90+", "90", age_death),
+    age_death = as.numeric(age_death))
 
 #Count number in each pathology category
 category_counts <- indiv_pathology %>%
   count(pathology)
 
-#Manually change value in library batch column as there are three values 0,6& 7
-indiv_pathology[317, "sequencingBatch"] <- 6
+#Manually correct value in library batch column as there are three values 0,6& 7
+indiv_pathology[indiv_pathology$specimenID %in% c("492_120515"), "sequencingBatch"] <- 6
 
-#=================================
+#===================================
 #Count Matrix pre-processing----
-#=================================
+#===================================
 
 #retain only gene IDs and sample IDs from the count matrix
 gene_ids <- counts[-(1:5), 1]  
@@ -54,12 +63,14 @@ rownames(count_matrix) <- gene_ids
 colnames(count_matrix) <- sample_ids
 
 #subset count matrix based on specimenID
+indiv_pathology = indiv_pathology %>% filter(pathology %in% c("CTL","AD"))
 IDs <- indiv_pathology$specimenID
 count_matrix <- count_matrix[, IDs] 
 
 #remove zero sum rows
 row_sums<- rowSums(count_matrix)
 count_matrix <- count_matrix[which(row_sums != 0),]
+
 
 colnames(count_matrix) = indiv_pathology$projid
 
@@ -89,7 +100,7 @@ count_matrix <- count_matrix %>%
   column_to_rownames(var="target_id")%>%
   select(-HGNC_symbol)
 
-write.csv(count_matrix, "bulk631_countmatrix.csv",row.names = TRUE,quote = FALSE)
+write.csv(count_matrix, "bulk476_countmatrix.csv",row.names = TRUE,quote = FALSE)
 
 #==================================================================
 #Retrieving count matrix for samples with matched snRNA data----
@@ -108,7 +119,7 @@ snRNA_idmap_uniq <- snRNA_idmap_uniq %>%
   inner_join(rosID_path,by="Subject") %>%
   mutate(`pathologic diagnosis of AD`= case_when(
     `pathologic diagnosis of AD` == "YES" ~ "AD",
-    `pathologic diagnosis of AD` == "NO" ~ "NoAD"))
+    `pathologic diagnosis of AD` == "NO" ~ "CTL"))
 
 #change the status of pathology in indiv_pathology based on Mathys et.al paper
 #for the 27 samples
@@ -117,18 +128,19 @@ indiv_pathology$pathology[indiv_pathology$projid %in% snRNA_idmap_uniq$projid] <
 
 
 #metadata df for the bulk27 and bulk631 samples
-metadata27 = indiv_pathology %>%
+metadata24= indiv_pathology %>%
   filter(projid %in% snRNA_biospecimen$projid)
 
-write.csv(metadata27, "metadata_bulk27.csv",row.names = FALSE, quote = FALSE)
+write.csv(metadata24, "metadata_bulk24.csv",row.names = FALSE, quote = FALSE)
 
-metadata631 = indiv_pathology
-write.csv(metadata631, "metadata_bulk631.csv", row.names = FALSE,quote = FALSE)
+metadata476 = indiv_pathology
+
+write.csv(metadata476, "metadata_bulk476.csv", row.names = FALSE,quote = FALSE)
 
 
 #Count matrix for bulk27 samples protein coding
-count_matrix27 = count_matrix[,as.character(metadata27$projid)]
-row_sums<- rowSums(count_matrix27)
-count_matrix27 <- count_matrix27[which(row_sums != 0),]
+count_matrix24 = count_matrix[,as.character(metadata24$projid)]
+row_sums<- rowSums(count_matrix24)
+count_matrix24 <- count_matrix24[which(row_sums != 0),]
 
-write.csv(count_matrix27, "bulk27_countmatrix.csv", row.names = TRUE, quote = FALSE)
+write.csv(count_matrix24, "bulk24_countmatrix.csv", row.names = TRUE, quote = FALSE)
