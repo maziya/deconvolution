@@ -1,6 +1,6 @@
 #covariates <- c("RIN", "ageDeath", "pmi", "sex","sequencingBatch") that should be used in the design matrix
 #give bulkcounts_file, metadata_file paths and cellproportions_file paths
-#sampleID is "projid" for ROSMAP and "specimenID" for MSBB
+#sampleID is either "projid" for ROSMAP or "specimenID" for MSBB
 
 
 runDEGs = function(bulkcounts_file, metadata_file, covariate_names,sampleID,cellproportions_file = NULL){
@@ -28,7 +28,7 @@ runDEGs = function(bulkcounts_file, metadata_file, covariate_names,sampleID,cell
   stopifnot(all(samples == metadata_df[[sampleID]]))
   
   group = factor(metadata_df[["pathology"]])
-  group = relevel(group, ref = "NoAD")
+  group = relevel(group, ref = "CTL")
   factor_vars = c("msex", "sex", "sequencingBatch","race")
   numeric_vars = c("RIN", "pmi", "ageDeath", "age_death", "rRNA.rate")
 
@@ -58,9 +58,13 @@ runDEGs = function(bulkcounts_file, metadata_file, covariate_names,sampleID,cell
     
   #edgeR analysis
   dge = DGEList(counts = bulkcounts.num,group=group)
+  # keep.genes = filterByExpr(dge)
+  # y = dge[keep.genes, , keep=FALSE]
   y = calcNormFactors(dge, method = 'TMM')
   y = estimateDisp(y, design,robust=TRUE)
+  plotBCV(y)
   fit = glmQLFit(y, design = design)
+  plotQLDisp(fit)
   qlf = glmQLFTest(fit,coef =2)
   pvals = qlf$table
   pvals$adj_pval = stats::p.adjust(pvals$PValue, method = 'BH')
